@@ -1,0 +1,229 @@
+#!/bin/sh
+##  The contents of this file are subject to the Mozilla Public License
+##  Version 1.1 (the "License"); you may not use this file except in
+##  compliance with the License. You may obtain a copy of the License
+##  at http://www.mozilla.org/MPL/
+##
+##  Software distributed under the License is distributed on an "AS IS"
+##  basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+##  the License for the specific language governing rights and
+##  limitations under the License.
+##
+##  The Original Code is RabbitMQ.
+##
+##  The Initial Developer of the Original Code is GoPivotal, Inc.
+##  Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
+##
+
+##
+##   OCF Resource Agent compliant rabbitmq-monitor resource script.
+##
+
+## OCF instance parameters
+##   OCF_RESKEY_servicemq
+##   OCF_RESKEY_log_base
+
+#######################################################################
+# Initialization:
+
+: ${OCF_FUNCTIONS_DIR=${OCF_ROOT}/resource.d/heartbeat}
+. ${OCF_FUNCTIONS_DIR}/.ocf-shellfuncs
+
+#######################################################################
+
+OCF_RESKEY_servicemq_default="service rabbitmq-server"
+OCF_RESKEY_log_base_default="/var/log/rabbitmq"
+: ${OCF_RESKEY_servicemq=${OCF_RESKEY_servicemq_default}}
+: ${OCF_RESKEY_log_base=${OCF_RESKEY_log_base_default}}
+meta_data() {
+    cat <<END
+<?xml version="1.0"?>
+<!DOCTYPE resource-agent SYSTEM "ra-api-1.dtd">
+<resource-agent name="rabbit-monitor">
+<version>1.0</version>
+
+<longdesc lang="en">
+Resource agent for RabbitMQ monitoring
+</longdesc>
+
+<shortdesc lang="en">Resource agent for RabbitMQ monitoring</shortdesc>
+
+<parameters>
+<parameter name="servicemq" unique="0" required="1">
+<longdesc lang="en">
+The path to the rabbitmq service
+</longdesc>
+<shortdesc lang="en">Path to rabbitmq service</shortdesc>
+<content type="string" default="${OCF_RESKEY_servicemq_default}" />
+</parameter>
+
+<parameter name="log_base" unique="0" required="1">
+<longdesc lang="en">
+Location of the directory under which logs will be created
+</longdesc>
+<shortdesc lang="en">Log base path</shortdesc>
+<content type="string" default="${OCF_RESKEY_log_base_default}" />
+</parameter>
+
+</parameters>
+
+<actions>
+<action name="start"        timeout="30" />
+<action name="stop"         timeout="30" />
+<action name="status"       timeout="3" interval="5" />
+<action name="monitor"      timeout="3" interval="5" />
+<action name="validate-all" timeout="10" />
+<action name="meta-data"    timeout="5" />
+</actions>
+</resource-agent>
+END
+}
+
+rabbit_usage() {
+    cat <<END
+usage: $0 {start|stop|status|monitor|validate-all|meta-data}
+
+Expects to have a fully populated OCF RA-compliant environment set.
+END
+}
+
+RABBITMQ_SERVICEMQ=$OCF_RESKEY_servicemq
+RABBITMQ_LOG_BASE=$OCF_RESKEY_log_base
+
+export_vars() {
+    [ ! -z $RABBITMQ_LOG_BASE ]            && export RABBITMQ_LOG_BASE
+}
+
+rabbit_validate_partial() {
+#    if [ ! -x $RABBITMQ_SERVICEMQ ]; then
+#        ocf_log err "rabbitmq-monitor service $RABBITMQ_SERVICEMQ does not exist or is not executable";
+#        exit $OCF_ERR_INSTALLED;
+#    fi
+    
+    if [ ! -z $RABBITMQ_LOG_BASE ] && [ ! -d $RABBITMQ_LOG_BASE ]; then
+        ocf_log err "rabbitmq-monitor log_base $RABBITMQ_LOG_BASE does not exist or is not a directory";
+        exit $OCF_ERR_INSTALLED;
+    fi                    
+
+    return $OCF_SUCCESS
+}
+
+rabbit_status() {
+    local rc
+    rc=`$RABBITMQ_SERVICEMQ status`
+    #ocf_log info "RABBITMQ_SERVICEMQ status resilt: $rc"
+
+    if [ `echo $rc | grep -c connection_procs` == 1 ]; then
+        ocf_log debug "RabbitMQ service is running normally"
+        return $OCF_SUCCESS
+    fi        
+
+    if [ `echo $rc | grep -c nodedown` == 1 ]; then
+        ocf_log debug "RabbitMQ service is not running"
+        return $OCF_NOT_RUNNING
+    else
+	ocf_log err "Unexpected return from rabbit service:: $action: $rc"
+        exit $OCF_ERR_GENERIC
+    fi
+}
+
+rabbit_start() {
+#: << COMMENTBLOCK
+   local rc
+
+    if rabbit_status; then
+        ocf_log info "Resource already running."
+        return $OCF_SUCCESS
+    fi
+
+    export_vars
+    
+    rc=`$RABBITMQ_SERVICEMQ start`
+    #sleep 5
+        
+    if [ `echo $rc | awk '{print match($0,"SUCCES")}'` -gt 0  ]; then
+        return $OCF_SUCCESS
+    fi
+    
+    ocf_log info "!!! rabbitmq service start failed: $rc"
+    exit $OCF_ERR_GENERIC    
+#COMMENTBLOCK
+    
+    #`crm resource cleanup $OCF_RESOURCE_INSTANCE`
+    #ocf_run "crm resource cleanup $OCF_RESOURCE_INSTANCE" 
+    
+    #return $OCF_SUCCESS    
+    
+    # rabbit_monitor
+    # return $?           
+}
+
+rabbit_stop() {
+    #return $OCF_SUCCESS
+    
+    #rabbit_monitor    
+    #return $?
+    rc=`$RABBITMQ_SERVICEMQ stop`
+        
+    if [ `echo $rc |  grep -c Stopping` == 1  ]; then
+        return $OCF_SUCCESS
+    fi
+                        
+    ocf_log info "!!! RabbitMQ service stop failed: $rc"
+                                
+    return $?                                        
+}
+
+
+rabbit_monitor() {
+    
+# rabbit_status
+# return $?
+
+    rabbit_state=`curl -s -i -u monitor_user:monitor_pwd http://127.0.0.1:15672/api/aliveness-test/monitor | grep -Po '"status":".*"'`
+    #echo $rabbit_state
+
+    if [ "${rabbit_state}" = "\"status\":\"ok\"" ]; then
+	#ocf_log info "rabbit_monitor --- 1"
+	return $OCF_SUCCESS
+    else
+	ocf_log info "!!! rabbit_monitor -1: --- Error in monitoring: http://127.0.0.1:15672/api/aliveness-test/monitor"
+	#rabbit_stop
+	#exit $OCF_ERR_GENERIC
+	return $OCF_NOT_RUNNING
+    fi          
+}
+
+case $__OCF_ACTION in
+    meta-data)
+        meta_data
+        exit $OCF_SUCCESS
+        ;;
+    usage|help)
+        rabbit_usage
+        exit $OCF_SUCCESS
+        ;;
+esac
+
+rabbit_validate_partial
+
+case $__OCF_ACTION in
+    start)
+        rabbit_start
+        ;;
+    stop)
+        rabbit_stop
+        ;;
+    status|monitor)
+        rabbit_monitor
+        ;;
+    validate-all)
+        exit $OCF_SUCCESS
+        ;;
+    *)
+        rabbit_usage
+        exit $OCF_ERR_UNIMPLEMENTED
+        ;;
+esac
+
+exit $?
