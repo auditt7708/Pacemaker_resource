@@ -1,0 +1,1 @@
+cibadmin --query > cib_back.xml

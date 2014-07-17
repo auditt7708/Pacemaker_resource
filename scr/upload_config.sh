@@ -1,0 +1,1 @@
+cibadmin --replace --xml-file cib.xml

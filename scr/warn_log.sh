@@ -1,0 +1,1 @@
+grep -E 'WARN|ERROR' /var/log/cluster/ha-debug.log > 1

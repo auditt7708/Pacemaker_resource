@@ -1,0 +1,1 @@
+tail -f /var/log/cluster/ha-err.log --lines=40

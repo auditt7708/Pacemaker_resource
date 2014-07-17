@@ -1,0 +1,43 @@
+node mts-dev-amqp-node-1.intervale.ru mts-dev-amqp-node-2.intervale.ru
+
+# Logging
+debug 1
+use_logd yes
+#logfacility daemon
+#logfacility local0
+
+#debugfile /var/log/cluster/ha-debug.log
+#logfile /var/log/cluster/ha.log
+
+# Misc Options
+traditional_compression off
+compression bz2
+coredumps true
+
+# Communications
+udpport 694
+#bcast eth0
+ucast eth0 mts-dev-amqp-node-1.intervale.ru
+autojoin any
+# crm yes
+crm respawn
+
+# Thresholds (in seconds)
+keepalive                       1
+warntime                        10
+deadtime                        20
+initdead                        30
+
+auto_failback on
+
+apiauth stonith-ng uid=root
+apiauth crm uid=root
+
+apiauth ipfail uid=root
+apiauth cms uid=root
+apiauth ping gid=root uid=root
+apiauth default gid=root
+
+max_rexmit_delay 10000
+hbgenmethod time
+
